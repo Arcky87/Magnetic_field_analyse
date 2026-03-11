@@ -2,7 +2,9 @@ import numpy as np
 import pandas as pd
 from dataclasses import dataclass
 from astropy.io import fits
-from typing import Callable, Tuple
+from typing import Callable, Tuple, Any
+
+from numpy import dtype, ndarray
 from scipy.signal import fftconvolve
 from matplotlib import pyplot as plt
 from scipy.ndimage import gaussian_filter1d
@@ -91,7 +93,8 @@ class SyntheticSpectrum:
         self.lines = lines
         self.snr = snr
 
-    def spectrum_without_magnetic(self, wavelengths: np.ndarray, vsini: float) -> np.ndarray:
+    def spectrum_without_magnetic(self, wavelengths: np.ndarray, vsini: float) -> tuple[
+        ndarray[Any, dtype[Any] | Any], ndarray]:
         centers = np.array([l.wavelength for l in self.lines])
         sigma = np.array([l.sigma for l in self.lines])
         depth = np.array([l.C for l in self.lines])
@@ -100,18 +103,23 @@ class SyntheticSpectrum:
 
         flux = continuum(wavelengths) + flux_lines
 
-        kernel = rotational_kernel(wavelengths, vsini)
+        kernel_rot = rotational_kernel(wavelengths, vsini)
 
-        flux = fftconvolve(flux, kernel, mode="same")
+        flux = fftconvolve(flux, kernel_rot, mode="same")
 
-        return add_noise(flux, self.snr)
+        pad = len(kernel_rot) // 2
+
+        flux = flux[pad:-pad]
+        wavelengths = wavelengths[pad:-pad]
+
+        return wavelengths, add_noise(flux, self.snr)
 
     def spectrum_with_magnetic(
             self,
             wavelengths: np.ndarray,
             B_field: float,
             vsini: float
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    ) -> tuple[ndarray[Any, dtype[Any] | Any], ndarray, ndarray]:
         # ---- извлекаем параметры линий в массивы ----
         lambda0 = np.array([l.wavelength for l in self.lines])
         depth = np.array([l.C for l in self.lines])
@@ -147,14 +155,20 @@ class SyntheticSpectrum:
         # ---- rotation ----
         kernel_rot = rotational_kernel(wavelengths, vsini)
 
-        flux_L = fftconvolve(flux_L, kernel_rot, mode="same")
-        flux_R = fftconvolve(flux_R, kernel_rot, mode="same")
+        flux_l = fftconvolve(flux_L, kernel_rot, mode="same")
+        flux_r = fftconvolve(flux_R, kernel_rot, mode="same")
+
+        pad = len(kernel_rot) // 2
+
+        flux_l = flux_l[pad:-pad]
+        flux_r = flux_r[pad:-pad]
+        wavelengths = wavelengths[pad:-pad]
 
         # ---- noise ----
-        flux_L = add_noise(flux_L, self.snr)
-        flux_R = add_noise(flux_R, self.snr)
+        flux_L = add_noise(flux_l, self.snr)
+        flux_R = add_noise(flux_r, self.snr)
 
-        return flux_L, flux_R
+        return wavelengths, flux_L, flux_R
 
 def degrade_resolution(lambda_orig, flux_orig, R, new_delta_lambda=None):
     """
@@ -251,14 +265,10 @@ if __name__ == '__main__':
 
     # wavelengths, flux = read_fits_spectrum('./Spectrum/HD128801_1.fits')
 
-    r = 15000.0
-
-    r_init = 5000000.0
-    wavelength_0 = 4650.0
-    step_wave = wavelength_0 / r_init
+    r = 10000.0
 
     vel_rot = 30.0
-    signal_noise = 1000.0
+    signal_noise = 50.0
 
     wavelengths = np.arange(4400.5, 4899.5, 0.001)
 
@@ -269,35 +279,37 @@ if __name__ == '__main__':
     synth = SyntheticSpectrum(lines, snr=signal_noise)
 
     # Спектр без магнитного поля
-    flux_noB = synth.spectrum_without_magnetic(wavelengths, vel_rot)
+    _, flux_noB = synth.spectrum_without_magnetic(wavelengths, vel_rot)
 
-    flux_L, flux_R = synth.spectrum_with_magnetic(wavelengths, B_field=3e4, vsini=vel_rot)
+    wavelengths, flux_L, flux_R = synth.spectrum_with_magnetic(wavelengths, B_field=1e3, vsini=vel_rot)
 
     wavelengths_res, flux_L = degrade_resolution(wavelengths, flux_L, r)
     _, flux_R = degrade_resolution(wavelengths, flux_R, r)
     _, flux_noB = degrade_resolution(wavelengths, flux_noB, r)
+
+    wavelengths = wavelengths_res
 
     # Визуализация спектров
     plt.plot(wavelengths_res, flux_noB, label='noB')
     plt.plot(wavelengths_res, flux_L, label='I', linestyle='dashed')
     plt.plot(wavelengths_res, flux_R, label='V', linestyle='dashed')
     plt.legend()
-    plt.show()
+    plt.close()
 
-    # # Пример: сохранить маску в CSV
-    # pd.DataFrame([vars(line) for line in lines]).rename(columns={'wavelength': 'lambda','C': 'depth'}).to_csv('test_stars_mask.csv', index=False)
-    #
-    # Spectrum_mask = 'test_stars_mask.csv'
-    # vsini = vel_rot
-    # star_name = 'test_star'
-    #
-    # line_parameter = pd.read_csv(Spectrum_mask, sep=',')
-    #
-    # star = polar_spectrum_star(wavelengths, flux_L, flux_R, line_parameter, -100.0, 100.0, vsini, star_name)
-    #
-    # print(star_name)
-    #
-    # print('Diff Method', star.compute_magnetic_field_by_method('DM_whole'))
-    # print('Mod Diff Method', star.compute_magnetic_field_by_method('MDM_whole'))
-    # print('Mod Int Method', star.compute_magnetic_field_by_method('MIM_whole'))
-    # print('LSD method', star.compute_magnetic_field_by_method('LSD_IM'))
+    # Пример: сохранить маску в CSV
+    pd.DataFrame([vars(line) for line in lines]).rename(columns={'wavelength': 'lambda','C': 'depth'}).to_csv('test_stars_mask.csv', index=False)
+
+    Spectrum_mask = 'test_stars_mask.csv'
+    vsini = vel_rot
+    star_name = 'test_star'
+
+    line_parameter = pd.read_csv(Spectrum_mask, sep=',')
+
+    star = polar_spectrum_star(wavelengths, flux_L, flux_R, line_parameter, -80.0, 80.0, vsini, star_name)
+
+    print(star_name)
+
+    print('Diff Method', star.compute_magnetic_field_by_method('DM_whole'))
+    print('Mod Diff Method', star.compute_magnetic_field_by_method('MDM_whole'))
+    print('Mod Int Method', star.compute_magnetic_field_by_method('MIM_whole'))
+    print('LSD method', star.compute_magnetic_field_by_method('LSD_IM'))
