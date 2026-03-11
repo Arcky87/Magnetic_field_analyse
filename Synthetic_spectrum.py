@@ -10,12 +10,14 @@ from matplotlib import pyplot as plt
 from scipy.ndimage import gaussian_filter1d
 from scipy.interpolate import interp1d
 from Magnetic_field_measurement import polar_spectrum_star
+from matplotlib.ticker import NullFormatter, ScalarFormatter
 
 # =====================
 # Константы
 # =====================
 SPEED_OF_LIGHT = 299792.458  # km/s
 K0_ZEEMAN = 4.6686e-13  # постоянная для эффекта Зеемана
+font_size = 20
 
 
 # =====================
@@ -265,10 +267,10 @@ if __name__ == '__main__':
 
     # wavelengths, flux = read_fits_spectrum('./Spectrum/HD128801_1.fits')
 
-    r = 10000.0
+    r = 15000.0
 
-    vel_rot = 30.0
-    signal_noise = 50.0
+    vel_rot = 50.0
+    signal_noise = 150.0
 
     wavelengths = np.arange(4400.5, 4899.5, 0.001)
 
@@ -281,7 +283,7 @@ if __name__ == '__main__':
     # Спектр без магнитного поля
     _, flux_noB = synth.spectrum_without_magnetic(wavelengths, vel_rot)
 
-    wavelengths, flux_L, flux_R = synth.spectrum_with_magnetic(wavelengths, B_field=1e3, vsini=vel_rot)
+    wavelengths, flux_L, flux_R = synth.spectrum_with_magnetic(wavelengths, B_field=-500, vsini=vel_rot)
 
     wavelengths_res, flux_L = degrade_resolution(wavelengths, flux_L, r)
     _, flux_R = degrade_resolution(wavelengths, flux_R, r)
@@ -305,7 +307,7 @@ if __name__ == '__main__':
 
     line_parameter = pd.read_csv(Spectrum_mask, sep=',')
 
-    star = polar_spectrum_star(wavelengths, flux_L, flux_R, line_parameter, -80.0, 80.0, vsini, star_name)
+    star = polar_spectrum_star(wavelengths, flux_L, flux_R, line_parameter, -80.0, 75.0, vsini, star_name)
 
     print(star_name)
 
@@ -313,3 +315,38 @@ if __name__ == '__main__':
     print('Mod Diff Method', star.compute_magnetic_field_by_method('MDM_whole'))
     print('Mod Int Method', star.compute_magnetic_field_by_method('MIM_whole'))
     print('LSD method', star.compute_magnetic_field_by_method('LSD_IM'))
+
+    # Визуализация LSD метода
+
+    fig = plt.figure(figsize=(9, 7))
+    plt.subplots_adjust()
+    ax1 = fig.add_subplot(2, 1, 1)
+    ax2 = fig.add_subplot(2, 1, 2)
+
+    ax1.grid()
+    ax2.grid()
+
+    ax1.plot(star.least_square_deconvolution_line_profile[0], star.least_square_deconvolution_line_profile[2],
+             color='black')
+    ax1.plot(star.least_square_deconvolution_line_profile[0],
+             np.zeros(len(star.least_square_deconvolution_line_profile[0])), linestyle='--', color='red')
+    ax1.set_ylabel('V/I', fontsize=font_size)
+    ax1.xaxis.set_major_formatter(NullFormatter())
+
+    sf = ScalarFormatter()
+    sf.set_powerlimits((-3, 3))
+    ax1.yaxis.set_major_formatter(sf)
+
+    ax2.plot(star.least_square_deconvolution_line_profile[0],
+             1.0 - star.least_square_deconvolution_line_profile[1], color='black')
+    ax2.set_xlabel('v, км/с', fontsize=font_size)
+    ax2.set_ylabel('I', fontsize=font_size)
+
+    for label in (ax1.get_xticklabels() + ax1.get_yticklabels()):
+        label.set_fontsize(font_size)
+
+    for label in (ax2.get_xticklabels() + ax2.get_yticklabels()):
+        label.set_fontsize(font_size)
+
+    plt.savefig('./Pictures/' + star.star_name + '_LSD' + '.png', format='png', dpi=800)
+    plt.close()

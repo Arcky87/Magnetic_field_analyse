@@ -144,7 +144,7 @@ if __name__ == '__main__':
     polar_field = np.random.uniform(1000.0, 8000.0)
     quad_field = 0.0
     octo_field = 0.0
-    ad = 0.4
+    ad = 0.0
 
     phases_array = np.sort(np.random.uniform(0, 1, num_phase)) - phi_0
 
