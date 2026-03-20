@@ -7,6 +7,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from Magnetic_Field_Functions_support import longitudinal_magnetic_field_landstreet
+from magnetic_model import magnetic_model
 
 
 # =========================================
@@ -95,81 +96,7 @@ def likelihood_mod(observe_data, observe_err, model_data, num_observ, b):
         -b / 2.0 * np.sum(np.power((observe_data - model_data) / observe_err, 2.0)))
 
 
-def prior_combine(declines_rotation, declines_magnetic_field, polar_fields, scale_factors, phases):
-    """
-    Высчитывает априорное распределение всех параметров модели. На вход могут быть поданы, как векторы, так и скаляры.
-    :param declines_rotation: float, numpy.array in radians.
-    :param declines_magnetic_field: float, numpy.array in radians.
-    :param polar_fields: float, numpy.array polar magnetic field in Gauss.
-    :param scale_factors: float, numpy.array scale factor for error observe.
-    :param phases: float, numpy.array phase of rotation in [0: 1].
-    :return: numpy.array, distribution
-    """
-
-    num_phases = len(phases)
-    num_i = len(declines_rotation)
-    num_beta = len(declines_magnetic_field)
-    num_fields = len(polar_fields)
-    num_factors = len(scale_factors)
-
-    result_distribution = np.zeros([num_phases, num_beta, num_i, num_fields, num_factors])
-
-    for i in tqdm(range(num_i)):
-        for j in range(num_beta):
-            for k in range(num_fields):
-                for l in range(num_factors):
-                    result_distribution[:, j, i, k, l] = prior_scale_coef(b=scale_factors[l]) * prior_phase(
-                        phase=phases) * prior_polar_magnetic_field(
-                        polar_field=polar_fields[k]) * prior_declination_of_magnetic_field(
-                        declination_of_magnetic_field=declines_magnetic_field[j]) * prior_declination_of_rotation(
-                        declination_of_rotation=declines_rotation[i])
-
-    return result_distribution
-
-
-def posterior_compute_orig_value_without_evidence(decline_rotation, decline_magnetic_field, polar_field, scale_factor,
-                                                  phases,
-                                                  observe_long_field, observe_long_field_err):
-    """
-    Расчет апостериорного распределения, пока чистый апостериор без маргинализации. Расчет в зависимости от всех параметров модели в том числе и фазы вращения звезды.
-    :param decline_rotation: float, in radians.
-    :param decline_magnetic_field: float, in radians.
-    :param polar_field: float, polar magnetic field in Gauss.
-    :param scale_factor: scale factor for error observe.
-    :param phases: float, numpy.array phase of rotation in [0: 1].
-    :param observe_long_field: float, numpy.array observe longitudinal magnetic field in Gauss.
-    :param observe_long_field_err: float, numpy.array observe error longitudinal magnetic field in Gauss.
-    :return: float, value posterior
-    """
-
-    quad_pole = 0.0
-    octo_pole = 0.0
-    asim_dipole = 0.0
-
-    num_observe = len(observe_long_field)
-
-    model_long_field = longitudinal_magnetic_field_landstreet(phase_angles=phases,
-                                                              declination_of_rotation=decline_rotation,
-                                                              declination_of_magnetic_field=decline_magnetic_field,
-                                                              polar_magnetic_field=polar_field,
-                                                              asymptotic_dipole=asim_dipole, quad_pole=quad_pole,
-                                                              octo_pole=octo_pole)
-
-    prior_prod_value = prior_scale_coef(b=scale_factor) * prior_phase(phase=phases) * prior_polar_magnetic_field(
-        polar_field=polar_field) * prior_declination_of_magnetic_field(
-        declination_of_magnetic_field=decline_magnetic_field) * prior_declination_of_rotation(
-        declination_of_rotation=decline_rotation)
-
-    likelihood_value = likelihood_mod(observe_data=observe_long_field, observe_err=observe_long_field_err,
-                                      model_data=model_long_field, num_observ=num_observe, b=scale_factor)
-
-    return prior_prod_value * likelihood_value
-
 def get_credible_levels(P, levels=[0.68, 0.95]):
-    """
-    Возвращает значения плотности, соответствующие заданным
-    доверительным уровням.
-    """
     P_flat = P.flatten()
     idx = np.argsort(P_flat)[::-1]
     P_sorted = P_flat[idx]
@@ -186,82 +113,81 @@ def get_credible_levels(P, levels=[0.68, 0.95]):
 if __name__ == '__main__':
     df = pd.read_csv('Test_synt_data.csv')
 
-    bp = np.linspace(0, 1.0E+4, 250)
+    bp = np.linspace(0, 1.0E+4, 20)
 
-    i_vector = np.linspace(0, np.pi, 37)
-    beta_vector = np.arange(0, np.pi, 5 * np.pi / 180.0)
-    phi_vector = np.arange(0, 2.0 * np.pi, 5.0 * np.pi / 180.0)
+    i_vector = np.linspace(0, np.pi, 15)
+    beta_vector = np.linspace(0, np.pi, 15)
+    phi_vector = np.linspace(0, 2.0 * np.pi, 15)
 
-    b_vector = np.linspace(0.1, 2.0, 40)
+    b_vector = np.linspace(0.1, 2.0, 10)
 
-    t_0 = time.time()
+    observe_data = np.array(list(df['<B_l>']))
+    observe_err = np.array(list(df['<B_err>']))
 
-    prior = prior_combine(
-        declines_rotation=i_vector,
-        declines_magnetic_field=beta_vector,
-        polar_fields=bp,
-        scale_factors=b_vector,
-        phases=phi_vector
-    )
+    t_0_1 = time.time()
 
-    P_phi = np.sum(prior, axis=(1, 2, 3, 4))
-    P_beta = np.sum(prior, axis=(0, 2, 3, 4))
-    P_i = np.sum(prior, axis=(0, 1, 3, 4))
-    P_bp = np.sum(prior, axis=(0, 1, 2, 4))
-    P_b = np.sum(prior, axis=(0, 1, 2, 3))
+    prior = magnetic_model.posterior_result(observe_data, observe_err, i_vector, beta_vector, bp, b_vector, phi_vector)
 
-    P_phi_beta = np.sum(prior, axis=(2, 3, 4))
-    P_phi_i = np.sum(prior, axis=(1, 3, 4))
-    P_phi_bp = np.sum(prior, axis=(1, 2, 4))
-    P_phi_b = np.sum(prior, axis=(1, 2, 3))
+    num_max = np.argmax(prior)
 
-    P_beta_i = np.sum(prior, axis=(0, 3, 4))
-    P_beta_bp = np.sum(prior, axis=(0, 2, 4))
-    P_beta_b = np.sum(prior, axis=(0, 2, 3))
+    indices = np.unravel_index(num_max, prior.shape)
 
-    P_i_bp = np.sum(prior, axis=(0, 1, 4))
-    P_i_b = np.sum(prior, axis=(0, 1, 3))
+    print(beta_vector[indices[0]] * 180.0 / np.pi, i_vector[indices[1]] * 180.0 / np.pi, bp[indices[2]])
 
-    P_bp_b = np.sum(prior, axis=(0, 1, 2))
+    t_0_2 = time.time()
 
-    params = [phi_vector, beta_vector, i_vector, bp, b_vector]
-    labels = [r"$\phi$", r"$\beta$", r"$i$", r"$B_p$", r"$b$"]
+    print(f'Time compute and plotting: {t_0_2 - t_0_1: .2f} c')
 
-    fig, axes = plt.subplots(5, 5, figsize=(10, 10))
+    # =========================
+    # 1D маргинальные распределения
+    # =========================
+    P_beta = np.sum(prior, axis=(1, 2))
+    P_i = np.sum(prior, axis=(0, 2))
+    P_bp = np.sum(prior, axis=(0, 1))
 
-    # === 1D распределения (диагональ) ===
-    P_1D = [P_phi, P_beta, P_i, P_bp, P_b]
+    # =========================
+    # 2D распределения
+    # =========================
+    P_beta_i = np.sum(prior, axis=2)
+    P_beta_bp = np.sum(prior, axis=1)
+    P_i_bp = np.sum(prior, axis=0)
 
-    for i in range(5):
-        axes[i, i].plot(params[i], P_1D[i])
+    # =========================
+    # параметры
+    # =========================
+    params = [beta_vector, i_vector, bp]
+    labels = [r"$\beta$", r"$i$", r"$B_p$"]
+
+    P_1D = [P_beta, P_i, P_bp]
+
+    P_2D = {
+        (1, 0): P_beta_i,
+        (2, 0): P_beta_bp,
+        (2, 1): P_i_bp
+    }
+
+    # =========================
+    # построение
+    # =========================
+    fig, axes = plt.subplots(3, 3, figsize=(8, 8))
+
+    # ---- диагональ ----
+    for i in range(3):
+        axes[i, i].plot(params[i], P_1D[i], color="black")
+        axes[i, i].fill_between(params[i], P_1D[i], color="red", alpha=0.3)
         axes[i, i].set_yticks([])
         axes[i, i].set_title(labels[i], fontsize=12)
 
-    # === 2D распределения (нижний треугольник) ===
-    P_2D = {
-        (1, 0): P_phi_beta,
-        (2, 0): P_phi_i,
-        (3, 0): P_phi_bp,
-        (4, 0): P_phi_b,
-        (2, 1): P_beta_i,
-        (3, 1): P_beta_bp,
-        (4, 1): P_beta_b,
-        (3, 2): P_i_bp,
-        (4, 2): P_i_b,
-        (4, 3): P_bp_b
-    }
-
+    # ---- нижний треугольник ----
     for (i, j), P in P_2D.items():
 
         P_smooth = gaussian_filter(P, sigma=1.0)
 
         lvl_68, lvl_95 = get_credible_levels(P_smooth)
 
-        levels = np.array([lvl_95, lvl_68])
-        levels = np.sort(levels)
-        levels = np.unique(levels)
+        levels = np.sort(np.unique([lvl_95, lvl_68]))
 
-        # заливка (красная)
+        # заливка
         axes[i, j].contourf(
             params[j],
             params[i],
@@ -281,36 +207,25 @@ if __name__ == '__main__':
                 linewidths=1.2
             )
 
-    # === скрываем верхний треугольник ===
-    for i in range(5):
-        axes[i, i].plot(params[i], P_1D[i], color="black")
-        axes[i, i].fill_between(params[i], P_1D[i], color="red", alpha=0.3)
-        axes[i, i].set_yticks([])
-        axes[i, i].set_title(labels[i], fontsize=12)  # ← это ключ
-
-    # === подписи осей ===
-
-    for i in range(5):
-        for j in range(i + 1, 5):
+    # ---- убрать верхний треугольник ----
+    for i in range(3):
+        for j in range(i + 1, 3):
             axes[i, j].axis("off")
 
-    # нижняя строка → подписи X
-    for j in range(5):
-        axes[4, j].set_xlabel(labels[j])
+    # ---- подписи осей ----
+    for j in range(3):
+        axes[2, j].set_xlabel(labels[j])
 
-    # левая колонка → подписи Y
-    for i in range(5):
+    for i in range(3):
         axes[i, 0].set_ylabel(labels[i])
 
-    # === убираем лишние тики внутри ===
-    for i in range(5):
-        for j in range(5):
-            if i != 4:
+    # ---- убрать лишние тики ----
+    for i in range(3):
+        for j in range(3):
+            if i != 2:
                 axes[i, j].set_xticklabels([])
             if j != 0:
                 axes[i, j].set_yticklabels([])
 
     plt.tight_layout()
     plt.show()
-
-    print(f'Time compute and plotting: {time.time() - t_0: .2f} c')

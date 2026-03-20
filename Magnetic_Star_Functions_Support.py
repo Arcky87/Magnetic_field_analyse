@@ -96,15 +96,15 @@ if __name__ == '__main__':
 
     # Задается звезда параметры ее поля
 
-    b_p0 = 1.0E+3
+    b_p0 = 8.0E+2
     decline_rotation_rad = np.random.uniform(0, np.pi)
     decline_polar_rad = np.random.uniform(0, np.pi)
 
-    num_phi = 20
-    vel_sin_i = 35.0
+    num_phi = 5
+    vel_sin_i = 75.0
 
-    spectrum_resol = 15000.0
-    spectrum_signal_noise = 150.0
+    spectrum_resol = 10000.0
+    spectrum_signal_noise = 100.0
 
     rand_phi = True
     need_phi_0 = True
