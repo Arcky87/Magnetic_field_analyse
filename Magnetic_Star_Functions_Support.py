@@ -93,18 +93,19 @@ def create_one_star(polar_magnetic_field, i_rad, beta_rad, n_phi, resolution, ve
 
 if __name__ == '__main__':
     print('Test')
-
-    # Задается звезда параметры ее поля
+    # ==================================================================
+    # Задается звезда параметры ее поля и самой звезды, параметры наблюдений.
+    # ==================================================================
 
     b_p0 = 8.0E+2
     decline_rotation_rad = np.random.uniform(0, np.pi)
     decline_polar_rad = np.random.uniform(0, np.pi)
 
     num_phi = 5
-    vel_sin_i = 75.0
+    vel_sin_i = 35.0
 
-    spectrum_resol = 10000.0
-    spectrum_signal_noise = 100.0
+    spectrum_resol = 15000.0
+    spectrum_signal_noise = 300.0
 
     rand_phi = True
     need_phi_0 = True
@@ -112,6 +113,10 @@ if __name__ == '__main__':
     data, f_0 = create_one_star(b_p0, decline_rotation_rad, decline_polar_rad, num_phi, spectrum_resol, vel_sin_i, spectrum_signal_noise, rand_phi, need_phi_0)
 
     true_phase = np.linspace(0, 1.0, 100) + f_0
+
+    # ==================================================================
+    # Сохранение полученных данных о звезде и некоторые статистические характеристики, а также магнитная кривая
+    # ==================================================================
 
     print('Statistick data')
 

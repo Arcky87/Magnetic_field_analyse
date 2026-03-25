@@ -1,4 +1,5 @@
 module magnetic_model
+    use incomplete_gamma_mod
     implicit none
 
     real(8), parameter :: pi = 3.141592653589793_8
@@ -71,52 +72,57 @@ function prior_polar_magnetic_field(polar_field) result(distribution)
     end function prior_scale_coef
 
 
-    function likelihood_mod(observe_data, observe_err, model_data, phases, b) result(likelihood)
+    function likelihood_mod(observe_data, observe_err, model_data, phases) result(likelihood)
     implicit none
-        real(8), intent(in), dimension(:) :: observe_data, observe_err, model_data, phases 
-        real(8), intent(in) :: b
+        real(8), intent(in), dimension(:) :: observe_data, observe_err, model_data, phases
         real(8) :: likelihood
-        real(8) :: chi2
+        real(8) :: chi2, average_model_data
         real(8), dimension(size(observe_data)) :: likelihood_observ_data
         real(8), dimension(size(model_data)) :: likelihood_model_data
         integer :: i, k, num_model_data, num_observ
+        real(8) :: b_min, b_max
+
+        b_min = 0.1_8
+        b_max = 2.0_8
 
         num_model_data = size(model_data)
         num_observ = size(observe_data)
 
         do i = 1, num_observ
             do k = 1, num_model_data
-                likelihood_model_data(k) = exp(-b / 2.0_8 * ((model_data(k) - observe_data(i)) / observe_err(i)) ** 2.0_8) &
-                &* prior_phase(phases(k))
+                chi2 = ((model_data(k) - observe_data(i)) / observe_err(i)) ** 2.0_8
+                likelihood_model_data(k) = prior_phase(phases(k)) / log(b_max / b_min) * &
+                & sqrt(2.0_8 / chi2) * (upper_incomplete_gamma_function(0.5_8, chi2 * b_max / 2.0_8) - &
+                & upper_incomplete_gamma_function(0.5_8, chi2 * b_min / 2.0_8))
             end do
 
-            chi2 = sum(likelihood_model_data)
+            average_model_data = sum(likelihood_model_data)
 
-            likelihood_observ_data(i) = 1.0_8 / observe_err(i) * chi2
+            likelihood_observ_data(i) = 1.0_8 / observe_err(i) * average_model_data
 
         end do
 
-        likelihood = product(likelihood_observ_data) * (sqrt(b / 2.0_8 / pi) / real(num_model_data, 8)) ** real(num_observ, 8)
+        likelihood = product(likelihood_observ_data) * (sqrt(1.0_8 / 2.0_8 / pi) / real(num_model_data, 8)) ** real(num_observ, 8)
 
     end function likelihood_mod
 
-    subroutine prior_result_by_value(i_angle, beta, bp0, b, prior_distribution)
+    subroutine prior_result_by_value(i_angle, beta, bp0, prior_distribution)
 
     implicit none
-        real(8), intent(in) :: i_angle, beta, bp0, b
+        real(8), intent(in) :: i_angle, beta, bp0
         real(8), intent(out) :: prior_distribution
 
             prior_distribution = prior_declination_of_magnetic_field(beta) * &
-            & prior_declination_of_rotation(i_angle) * prior_polar_magnetic_field(bp0) * prior_scale_coef(b)
+            & prior_declination_of_rotation(i_angle) * prior_polar_magnetic_field(bp0)
 
     end subroutine prior_result_by_value
 
     subroutine posterior_by_value(observe_data, observe_data_err, decline_rotation, decline_magnetic_field, & 
-    & polar_field, scale_factor, phases, posterior_distribution)
+    & polar_field, phases, posterior_distribution)
 
     implicit none
         real(8), intent(in) :: decline_rotation, decline_magnetic_field, &
-        & polar_field, scale_factor
+        & polar_field
         real(8), intent(in), dimension(:) :: phases, observe_data, observe_data_err
         real(8), intent(out) :: posterior_distribution
         real(8) :: likelihood, prior_distribution
@@ -127,66 +133,57 @@ function prior_polar_magnetic_field(polar_field) result(distribution)
         num_model_data = size(phases)
 
         call prior_result_by_value(decline_rotation, decline_magnetic_field, polar_field, & 
-        &  scale_factor, prior_distribution)
+        & prior_distribution)
 
         do i = 1, num_model_data
             call compute_bl(phases(i), decline_rotation * 180.0_8 / pi, decline_magnetic_field * 180.0_8 / pi, polar_field, &
             &0.0_8, 0.0_8, 0.0_8, 0.35_8, 0.25_8, model_data(i))
         end do
 
-        likelihood = likelihood_mod(observe_data, observe_data_err, model_data, phases, scale_factor)
+        likelihood = likelihood_mod(observe_data, observe_data_err, model_data, phases)
 
-        posterior_distribution = prior_distribution * likelihood 
+        posterior_distribution = prior_distribution * likelihood
 
     end subroutine posterior_by_value
 
     subroutine posterior_result(observe_data, observe_data_err, declines_rotation, declines_magnetic_field, & 
-    & polar_fields, scale_factors, phases, posterior_distribution)
+    & polar_fields, phases, posterior_distribution)
 
         real(8), intent(in), dimension(:) :: observe_data, observe_data_err, declines_rotation, declines_magnetic_field, & 
-        & polar_fields, scale_factors, phases
+        & polar_fields, phases
         real(8), intent(out), dimension(size(declines_magnetic_field), size(declines_rotation), size(polar_fields)& 
         &) :: posterior_distribution
-        real(8), dimension(size(declines_magnetic_field), size(declines_rotation), size(polar_fields), & 
-        & size(scale_factors)) :: posterior_distribution_pre
-        integer :: num_beta, num_i, num_bp0, num_b
-        integer :: j, k, l, m
-        real(8) :: evidence, beta, i_angle, bp0, b
-        real(8) :: dbeta, di, dbp0, db, t1
+        integer :: num_beta, num_i, num_bp0
+        integer :: j, k, l
+        real(8) :: evidence, beta, i_angle, bp0
+        real(8) :: dbeta, di, dbp0, t1
 
         num_beta = size(declines_magnetic_field)
         num_i = size(declines_rotation)
         num_bp0 = size(polar_fields)
-        num_b = size(scale_factors)
 
         dbeta = abs(declines_magnetic_field(2) - declines_magnetic_field(1))
         di = abs(declines_rotation(2) - declines_rotation(1))
         dbp0 = abs(polar_fields(2) - polar_fields(1))
-        db = abs(scale_factors(2) - scale_factors(1))
 
         do j = 1, num_beta
             call cpu_time(t1)
             write(*, *) 'Present num ', j, 'Max ', num_beta, 'time mark', t1
             do k = 1, num_i
                 do l = 1, num_bp0
-                    do m = 1, num_b
-                        beta = declines_magnetic_field(j) 
-                        i_angle = declines_rotation(k) 
-                        bp0 = polar_fields(l)
-                        b = scale_factors(m)
+                    beta = declines_magnetic_field(j) 
+                    i_angle = declines_rotation(k) 
+                    bp0 = polar_fields(l)
 
-                        call posterior_by_value(observe_data, observe_data_err, i_angle, beta, & 
-                        & bp0, b, phases, posterior_distribution_pre(j, k, l, m))
-                    end do
+                    call posterior_by_value(observe_data, observe_data_err, i_angle, beta, & 
+                    & bp0, phases, posterior_distribution(j, k, l))
                 end do
             end do
         end do
 
-        evidence = sum(posterior_distribution_pre) * dbeta * di * db * dbp0
+        evidence = sum(posterior_distribution) * dbeta * di * dbp0
 
-        posterior_distribution_pre = posterior_distribution_pre / evidence
-
-        posterior_distribution = sum(posterior_distribution_pre, dim=4) * db
+        posterior_distribution = posterior_distribution / evidence
 
     end subroutine posterior_result
 
