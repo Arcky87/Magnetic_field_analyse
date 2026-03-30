@@ -3,7 +3,7 @@ program fldcurv
     implicit none
 
     integer :: i, j, k, num_observ, num_phases, num_i, num_beta, num_bp0, loc_max(3)
-    real(8) :: phase, t1, t2
+    real(8) :: t1, t2
     real(8), allocatable, dimension(:) :: observ_magnetic_field, observ_err_magnetic_field
     real(8), allocatable, dimension(:) :: phase_vector, i_vector, beta_vector, bp0_vector
     real(8), allocatable, dimension(:, :, :) :: posterior_map
@@ -23,7 +23,7 @@ program fldcurv
     allocate(posterior_map(1:num_beta, 1:num_i, 1:num_bp0))
 
     do i = 1, num_observ
-        read(15, *) phase, observ_magnetic_field(i), observ_err_magnetic_field(i)
+        read(15, *) observ_magnetic_field(i), observ_err_magnetic_field(i)
     end do
 
     phase_vector = (/( i * (1.0_8 - 0.0_8) / real(num_phases - 1, 8), i = 0, num_phases - 1 )/)

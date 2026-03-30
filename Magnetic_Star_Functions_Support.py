@@ -86,11 +86,13 @@ def create_one_star(polar_magnetic_field, i_rad, beta_rad, n_phi, resolution, ve
 
     synt_observ = pd.DataFrame({'phase': phases - phase_0, '<B_l>': lmf_measure, '<B_err>': lmf_measure_error})
 
+    synt_observ_without_phase = pd.DataFrame({'<B_l>': lmf_measure, '<B_err>': lmf_measure_error})
+
     num_phases = len(synt_observ)
 
     with open('./Fortran_code/fortran_data.dat', 'w') as f:
         f.write(f'{num_phases}\n')
-        synt_observ.to_csv(f, index=False, sep=' ', header=False)
+        synt_observ_without_phase.to_csv(f, index=False, sep=' ', header=False)
 
     synt_observ.to_csv('Synthetic_data.csv', index=False)
 
