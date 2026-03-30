@@ -1,6 +1,5 @@
 program fldcurv
     use magnetic_model
-    use incomplete_gamma_mod
     implicit none
 
     integer :: i, j, k, num_observ, num_phases, num_i, num_beta, num_bp0, loc_max(3)

@@ -105,7 +105,7 @@ if __name__ == '__main__':
 
         t_0_1 = time.time()
 
-        posterior_map = magnetic_model.posterior_result(observe_data, observe_err, i_vector, beta_vector, bp, phi_vector)
+        posterior_map = magnetic_model.posterior_result(observe_data, observe_err, i_vector, bp, phi_vector)
 
         num_max = np.argmax(posterior_map)
 

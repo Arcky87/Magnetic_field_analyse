@@ -1,8 +1,8 @@
 module magnetic_model
-    use incomplete_gamma_mod
     implicit none
 
-    real(8), parameter :: pi = 3.141592653589793_8
+    real(8), parameter :: pi = 3.141592653589793_8, eps = epsilon(1.0_8)
+    integer, parameter :: max_iter = 200
 
 contains
 
@@ -156,22 +156,17 @@ function prior_polar_magnetic_field(polar_field) result(distribution)
         integer :: num_beta, num_i, num_bp0
         integer :: j, k, l
         real(8) :: evidence, beta, i_angle, bp0
-        real(8) :: dbeta, di, dbp0, t1
 
         num_beta = size(declines_magnetic_field)
         num_i = size(declines_rotation)
         num_bp0 = size(polar_fields)
 
-        ! dbeta = abs(declines_magnetic_field(2) - declines_magnetic_field(1))
-        ! di = abs(declines_rotation(2) - declines_rotation(1))
-        ! dbp0 = abs(polar_fields(2) - polar_fields(1))
-
-        !$omp parallel do collapse(3) private(j,k,l,beta,i_angle,bp0) shared(posterior_distribution)
+        !$omp parallel do collapse(3) private(j, k, l, beta, i_angle, bp0) shared(posterior_distribution)
         do j = 1, num_beta
             do k = 1, num_i
                 do l = 1, num_bp0
-                    beta = declines_magnetic_field(j) 
-                    i_angle = declines_rotation(k) 
+                    beta = declines_magnetic_field(j)
+                    i_angle = declines_rotation(k)
                     bp0 = polar_fields(l)
 
                     call posterior_by_value(observe_data, observe_data_err, i_angle, beta, & 
@@ -181,7 +176,7 @@ function prior_polar_magnetic_field(polar_field) result(distribution)
         end do
         !$omp end parallel do
 
-        evidence = sum(posterior_distribution) ! * dbeta * di * dbp0
+        evidence = sum(posterior_distribution)
 
         posterior_distribution = posterior_distribution / evidence
 
@@ -280,8 +275,6 @@ function prior_polar_magnetic_field(polar_field) result(distribution)
 
     end subroutine disk_field
 
-
-
     subroutine magnetic_field(x,y,z,ai,beta,phi,bp0,ad,bq,boct,bx,by,bz)
 
         implicit none
@@ -356,5 +349,82 @@ function prior_polar_magnetic_field(polar_field) result(distribution)
         bz = -bxr*sai + bzr*cai
 
     end subroutine magnetic_field
+
+    function upper_incomplete_gamma_function(s, x) result(upper_gamma)
+    implicit none
+    real(8), intent(in) :: s, x
+    real(8) :: upper_gamma
+
+    if (x >= real(s + 1, 8)) then
+        upper_gamma = upper_incomplete_gamma_function_norm(s, x) * gamma(s)
+    else
+        upper_gamma = (1.0_8 - lower_incomplete_gamma_function_norm(s, x)) * gamma(s)
+    end if
+
+    end function upper_incomplete_gamma_function
+
+    function upper_incomplete_gamma_function_norm(s, x) result(upper_gamma)
+        real(8), intent(in) :: s, x
+        real(8) :: upper_gamma
+        real(8) :: d, c, f, delta, a, b, log_prefix
+        integer :: j
+
+        if (x <= 0.0_8) then
+            upper_gamma = 1.0_8
+            return
+        end if
+
+        log_prefix = s * log(x) - x - log_gamma(s)
+
+        f = x
+        if (abs(f) < eps) f = eps
+        c = f
+        d = 0.0_8
+
+        do j = 1, max_iter
+            a = -real(j, 8) * (real(j, 8) - s)
+            b = 2.0_8 * j + 1.0_8 - s + x
+            
+            d = b + a * d
+            if (abs(d) < eps) d = eps
+            c = b + a / c
+            if (abs(c) < eps) c = eps
+            
+            d = 1.0_8 / d
+            delta = c * d
+            f = f * delta
+            
+            if (abs(delta - 1.0_8) < eps) exit
+        end do
+
+        upper_gamma = exp(log_prefix) / f
+
+    end function upper_incomplete_gamma_function_norm
+
+    function lower_incomplete_gamma_function_norm(s, x) result(lower_gamma)
+        real(8), intent(in) :: s, x
+        real(8) :: lower_gamma
+        real(8) :: term, sum_val, log_prefix
+        integer :: i
+
+        if (x <= 0.0_8) then
+            lower_gamma = 0.0_8
+            return
+        end if
+
+        log_prefix = s * log(x) - x - log_gamma(s)
+
+        term = 1.0_8 / s
+        sum_val = term
+
+        do i = 1, max_iter
+            term = term * (x / (s + real(i, 8)))
+            sum_val = sum_val + term
+            if (abs(term) < abs(sum_val) * eps) exit
+        end do
+
+        lower_gamma = sum_val * exp(log_prefix)
+
+    end function lower_incomplete_gamma_function_norm
 
 end module magnetic_model
