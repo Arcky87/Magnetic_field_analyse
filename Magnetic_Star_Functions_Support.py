@@ -71,7 +71,8 @@ def synt_polar_spectrum_measure_spectrum(long_magnetic_star, r, vel_rot, signal_
     return measure_mf, error_measure_mf
 
 
-def create_one_star(polar_magnetic_field, i_rad, beta_rad, n_phi, resolution, vel_rot, snr, ran_phase=True,
+def create_one_star(polar_magnetic_field, i_rad, beta_rad, n_phi, resolution, vel_rot, snr, phase_mode=True,
+                    ran_phase=True,
                     zero_phase=True):
     phases, l_magnetic_fields, phase_0 = create_magnetic_curve(polar_magnetic_field, i_rad, beta_rad, n_phi,
                                                                ran_phase, zero_phase)
@@ -90,9 +91,14 @@ def create_one_star(polar_magnetic_field, i_rad, beta_rad, n_phi, resolution, ve
 
     num_phases = len(synt_observ)
 
-    with open('./Fortran_code/fortran_data.dat', 'w') as f:
-        f.write(f'{num_phases}\n')
-        synt_observ_without_phase.to_csv(f, index=False, sep=' ', header=False)
+    if phase_mode:
+        with open('./Fortran_code/fortran_data.dat', 'w') as f:
+            f.write(f'{num_phases}\n')
+            synt_observ.to_csv(f, index=False, sep=' ', header=False)
+    else:
+        with open('./Fortran_code/fortran_data.dat', 'w') as f:
+            f.write(f'{num_phases}\n')
+            synt_observ_without_phase.to_csv(f, index=False, sep=' ', header=False)
 
     synt_observ.to_csv('Synthetic_data.csv', index=False)
 
@@ -105,20 +111,22 @@ if __name__ == '__main__':
     # Задается звезда параметры ее поля и самой звезды, параметры наблюдений.
     # ==================================================================
 
-    b_p0 = 100.0
+    b_p0 = 800.0
     decline_rotation_rad = np.random.uniform(0, np.pi)
     decline_polar_rad = np.random.uniform(0, np.pi)
 
-    num_phi = 100
-    vel_sin_i = 200.0
+    num_phi = 20
+    vel_sin_i = 20.0
 
     spectrum_resol = 45000.0
     spectrum_signal_noise = 500.0
 
+    phase_mode = True
     rand_phi = True
     need_phi_0 = True
 
-    data, f_0 = create_one_star(b_p0, decline_rotation_rad, decline_polar_rad, num_phi, spectrum_resol, vel_sin_i, spectrum_signal_noise, rand_phi, need_phi_0)
+    data, f_0 = create_one_star(b_p0, decline_rotation_rad, decline_polar_rad, num_phi, spectrum_resol, vel_sin_i,
+                                spectrum_signal_noise, phase_mode, rand_phi, need_phi_0)
 
     true_phase = np.linspace(0, 1.0, 100) + f_0
 
@@ -134,7 +142,8 @@ if __name__ == '__main__':
 
     print(f'Polar Magnetic Field: {b_p0}')
 
-    print(f'Average quad magnetic field: {np.sqrt(np.mean(np.square(data['<B_l>'])))} +- {np.sqrt(np.mean(np.square(data['<B_err>'])))}')
+    print(
+        f'Average quad magnetic field: {np.sqrt(np.mean(np.square(data['<B_l>'])))} +- {np.sqrt(np.mean(np.square(data['<B_err>'])))}')
 
     with open('stat_synthetic_data_output.txt', 'w') as f:
         f.write('Statistick data\n')
@@ -149,6 +158,8 @@ if __name__ == '__main__':
             f'Average quad magnetic field: {np.sqrt(np.mean(np.square(data['<B_l>']))): .2f} +- {np.sqrt(np.mean(np.square(data['<B_err>']))): .2f}')
 
     plt.errorbar(data['phase'], data['<B_l>'], yerr=data['<B_err>'], fmt='.', capsize=2, label='<B_l>')
-    plt.plot(true_phase - f_0, longitudinal_magnetic_field_landstreet(true_phase, decline_rotation_rad, decline_polar_rad, b_p0,0.0, 0.0, 0.0), label='True')
+    plt.plot(true_phase - f_0,
+             longitudinal_magnetic_field_landstreet(true_phase, decline_rotation_rad, decline_polar_rad, b_p0, 0.0, 0.0,
+                                                    0.0), label='True')
     plt.legend()
     plt.show()

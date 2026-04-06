@@ -85,6 +85,7 @@ if __name__ == '__main__':
     # ==================================================================
 
     python_compute = False
+    phase_mode = True
 
     num_phases = 72
     num_i = 36
@@ -103,13 +104,12 @@ if __name__ == '__main__':
 
     if python_compute:
 
-
         observe_data = np.array(list(df['<B_l>']))
         observe_err = np.array(list(df['<B_err>']))
 
         t_0_1 = time.time()
 
-        posterior_map = magnetic_model.posterior_result(observe_data, observe_err, i_vector, beta_vector, bp, phi_vector)
+        posterior_map = magnetic_model.posterior_result(observe_data, observe_err, i_vector, beta_vector, bp, phase_mode,  phi_vector)
 
         num_max = np.argmax(posterior_map)
 

@@ -7,38 +7,70 @@ program fldcurv
     real(8), allocatable, dimension(:) :: observ_magnetic_field, observ_err_magnetic_field
     real(8), allocatable, dimension(:) :: phase_vector, i_vector, beta_vector, bp0_vector
     real(8), allocatable, dimension(:, :, :) :: posterior_map
+    logical :: phase_mod
 
     open(15, file='fortran_data.dat', status='old', action='read')
     open(16, file='fortran_maps_output.dat', status='old', action='write')
 
     read(15, *) num_observ
 
-    num_phases = 72
+    phase_mod = .TRUE.
+
     num_i = 36
     num_beta = 36
     num_bp0 = 250
 
-    allocate(phase_vector(1:num_phases), i_vector(1:num_i), beta_vector(1:num_beta), bp0_vector(1:num_bp0))
+    allocate(i_vector(1:num_i), beta_vector(1:num_beta), bp0_vector(1:num_bp0))
     allocate(observ_magnetic_field(1:num_observ), observ_err_magnetic_field(1:num_observ))
     allocate(posterior_map(1:num_beta, 1:num_i, 1:num_bp0))
 
-    do i = 1, num_observ
-        read(15, *) observ_magnetic_field(i), observ_err_magnetic_field(i)
-    end do
-
-    phase_vector = (/( i * (1.0_8 - 0.0_8) / real(num_phases - 1, 8), i = 0, num_phases - 1 )/)
     i_vector = (/( i * (pi - 0.0_8) / real(num_i - 1, 8), i = 0, num_i - 1 )/)
     beta_vector = (/( i * (pi - 0.0_8) / real(num_beta - 1, 8), i = 0, num_beta - 1 )/)
-    bp0_vector = (/( i * (10000.0_8 - 0.0_8) / real(num_bp0 - 1, 8), i = 0, num_bp0 - 1 )/)
+    bp0_vector = (/( i * (40000.0_8 - 0.0_8) / real(num_bp0 - 1, 8), i = 0, num_bp0 - 1 )/)
 
-    call cpu_time(t1)
+    if (phase_mod) then
 
-    call posterior_result(observ_magnetic_field, observ_err_magnetic_field, i_vector, beta_vector, & 
-    & bp0_vector, phase_vector, posterior_map)
+        write(*, *) 'Start Compute with phase'
 
-    call cpu_time(t2)
+        allocate(phase_vector(1:num_observ))
 
-    write(*, *) 'Time compute:', (t2 - t1) / 16, 'c'
+        do i = 1, num_observ
+            read(15, *) phase_vector(i), observ_magnetic_field(i), observ_err_magnetic_field(i)
+        end do
+
+        call cpu_time(t1)
+
+        call posterior_result(observ_magnetic_field, observ_err_magnetic_field, i_vector, beta_vector, & 
+        & bp0_vector, phase_vector, phase_mod, posterior_map)
+
+        call cpu_time(t2)
+
+        write(*, *) 'Time compute:', (t2 - t1) / 16, 'c'
+
+    else
+
+        write(*, *) 'Start Compute without phase'
+
+        num_phases = 72
+
+        allocate(phase_vector(1:num_phases))
+
+        do i = 1, num_observ
+            read(15, *) observ_magnetic_field(i), observ_err_magnetic_field(i)
+        end do
+
+        phase_vector = (/( i * (1.0_8 - 0.0_8) / real(num_phases - 1, 8), i = 0, num_phases - 1 )/)
+
+        call cpu_time(t1)
+
+        call posterior_result(observ_magnetic_field, observ_err_magnetic_field, i_vector, beta_vector, & 
+        & bp0_vector, phase_vector, phase_mod, posterior_map)
+
+        call cpu_time(t2)
+
+        write(*, *) 'Time compute:', (t2 - t1) / 16, 'c'
+
+    end if
 
     do i = 1, num_beta
         do j = 1, num_i
